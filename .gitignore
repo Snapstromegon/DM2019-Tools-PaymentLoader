@@ -1,0 +1,4 @@
+node_modules
+.vscode
+result.csv
+result.json
