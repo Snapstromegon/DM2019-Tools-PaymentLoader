@@ -1,4 +1,5 @@
 const puppeteer = require('puppeteer');
+const puppeteerCore = require('puppeteer-core');
 const yargs = require('yargs');
 const fs = require('fs');
 const csvStringify = require('csv-stringify');
@@ -6,12 +7,30 @@ const csvStringify = require('csv-stringify');
 const args = yargs.argv;
 
 (async () => {
-  const browser = await puppeteer.launch();
-  await login(browser, { user: args.user, password: args.password });
-  const registrants = await getRegistrantInfos(browser);
+  let browser;
+  if (args.chromePath) {
+    browser = await puppeteerCore.launch({
+      headless: false,
+      executablePath: args.chromePath
+    });
+  } else {
+    browser = await puppeteer.launch({
+      headless: false
+    });
+  }
+  await login(browser, {
+    user: args.user,
+    password: args.password
+  });
+  let registrants = await getRegistrantInfos(browser);
   await fillCompetitors(browser, registrants);
   await fillLodging(browser, registrants);
   await browser.close();
+  for(const key in registrants){
+    if(registrants[key].deleted){
+      delete registrants[key];
+    }
+  }
 
   if (args.json) {
     await fs.promises.writeFile(
@@ -75,7 +94,6 @@ async function fillCompetitors(browser, registrants) {
   );
   await page.close();
 
-
   await Promise.all(
     competitorLinks.map(competitorLink =>
       fillCompetitionCompetitors(browser, competitorLink, registrants)
@@ -128,24 +146,25 @@ async function getRegistrantInfos(browser) {
           await (await column.getProperty('textContent')).jsonValue()
       )
     );
-    if (columnText[8] !== 'Deleted') {
-      registrants[parseInt(columnText[0])] = {
-        id: parseInt(columnText[0]),
-        name: columnText[2] + ' ' + columnText[1],
-        age: columnText[3],
-        gender: columnText[4],
-        club: columnText[5],
-        mail: columnText[9],
-        ek: false,
-        pk: false,
-        kg: false,
-        gg: false,
-        üb15_16: false,
-        üb16_17: false
-      };
-    }
+    registrants[parseInt(columnText[0])] = {
+      id: parseInt(columnText[0]),
+      name: columnText[2] + ' ' + columnText[1],
+      age: columnText[3],
+      gender: columnText[4],
+      club: columnText[5],
+      mail: columnText[9],
+      ek: false,
+      pk: false,
+      kg: false,
+      gg: false,
+      üb15_16: false,
+      üb16_17: false,
+      deleted: columnText[8].includes('Deleted')
+    };
   }
   await page.close();
-  console.log(`✔️ Done - ${Object.keys(registrants).length} Registrants loaded`);
+  console.log(
+    `✔️ Done - ${Object.keys(registrants).length} Registrants loaded`
+  );
   return registrants;
 }
